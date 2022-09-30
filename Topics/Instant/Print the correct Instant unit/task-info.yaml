@@ -1,0 +1,16 @@
+type: code
+files:
+- name: src/Main.java
+  visible: true
+  text: "import java.util.Scanner;\nimport java.time.*;\nimport java.time.temporal.ChronoUnit;\n\
+    \npublic class Main {\n    public static void main(String[] args) {\n        Scanner\
+    \ scanner = new Scanner(System.in);\n\n        subtractFromEpoch(scanner.nextInt(),\
+    \ scanner.next());\n    } \n\n    public static void subtractFromEpoch(int days,\
+    \ String zone) {\n\n    }\n}"
+  learner_created: false
+feedback_link: https://hyperskill.org/learn/step/21245#comment
+status: Solved
+feedback:
+  message: <html>Correct solution</html>
+  time: Fri, 26 Aug 2022 21:56:46 UTC
+record: -1

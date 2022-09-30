@@ -1,0 +1,5 @@
+<h2>Determine the value</h2>
+<p>What is a value of the variable <code class="language-java">result</code>?</p>
+
+<pre><code class="language-java">int result = Stream.of(-1, 2, -3, 4)
+                   .collect(Collectors.reducing(0, x -&gt; x &gt; 0 ? x : -x, (x, y) -&gt; x + y));</code></pre>

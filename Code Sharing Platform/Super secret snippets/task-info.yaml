@@ -1,0 +1,1533 @@
+type: edu
+files:
+- name: src/platform/CodeSharingPlatform.java
+  visible: true
+  text: |
+    package platform;
+
+    import org.springframework.boot.SpringApplication;
+    import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+    @SpringBootApplication
+    public class CodeSharingPlatform {
+
+        public static void main(String[] args) {
+            SpringApplication.run(CodeSharingPlatform.class, args);
+        }
+
+    }
+  learner_created: false
+- name: build.gradle
+  visible: true
+  text: |-
+    buildscript {
+        apply plugin: 'hyperskill'
+
+        repositories {
+            mavenCentral()
+        }
+        dependencies {
+            classpath "org.springframework.boot:spring-boot-gradle-plugin:$hs.spring.bootVersion"
+            classpath "io.spring.gradle:dependency-management-plugin:$hs.spring.dependencyManagementVersion"
+        }
+    }
+
+    apply plugin: 'java'
+    apply plugin: 'org.springframework.boot'
+    apply plugin: 'io.spring.dependency-management'
+
+    repositories {
+        mavenCentral()
+    }
+
+    sourceSets.main.resources.srcDirs = ["src/resources"]
+
+    dependencies {
+        implementation 'org.springframework.boot:spring-boot-starter'
+        implementation 'org.springframework.boot:spring-boot-starter-actuator'
+        implementation 'org.springframework.boot:spring-boot-starter-web'
+    }
+  learner_created: false
+- name: src/resources/application.properties
+  visible: true
+  text: |
+    server.port=8889
+    management.endpoints.web.exposure.include=*
+    management.endpoint.shutdown.enabled=true
+  learner_created: false
+- name: test/CodeSharingPlatformTest.java
+  visible: false
+  text: |
+    import com.google.gson.JsonArray;
+    import com.google.gson.JsonObject;
+    import org.hyperskill.hstest.dynamic.input.DynamicTesting;
+    import org.hyperskill.hstest.dynamic.input.DynamicTestingMethod;
+    import org.hyperskill.hstest.exception.outcomes.PresentationError;
+    import org.hyperskill.hstest.exception.outcomes.WrongAnswer;
+    import org.hyperskill.hstest.mocks.web.response.HttpResponse;
+    import org.hyperskill.hstest.stage.SpringTest;
+    import org.hyperskill.hstest.testcase.CheckResult;
+    import org.jsoup.Jsoup;
+    import org.jsoup.nodes.Document;
+    import org.jsoup.nodes.Element;
+    import org.jsoup.select.Elements;
+    import platform.CodeSharingPlatform;
+
+    import java.util.HashMap;
+    import java.util.Map;
+
+    import static org.hyperskill.hstest.common.Utils.sleep;
+    import static org.hyperskill.hstest.testing.expect.Expectation.expect;
+    import static org.hyperskill.hstest.testing.expect.json.JsonChecker.isArray;
+    import static org.hyperskill.hstest.testing.expect.json.JsonChecker.isInteger;
+    import static org.hyperskill.hstest.testing.expect.json.JsonChecker.isNumber;
+    import static org.hyperskill.hstest.testing.expect.json.JsonChecker.isObject;
+    import static org.hyperskill.hstest.testing.expect.json.JsonChecker.isString;
+
+    public class CodeSharingPlatformTest extends SpringTest {
+        public CodeSharingPlatformTest() {
+            super(CodeSharingPlatform.class, "../snippets.mv.db");
+        }
+
+        final String API_CODE = "/api/code/";
+        final String WEB_CODE = "/code/";
+
+        final String API_CODE_NEW = "/api/code/new";
+        final String WEB_CODE_NEW = "/code/new";
+
+        final String API_LATEST = "/api/code/latest";
+        final String WEB_LATEST = "/code/latest";
+
+        final String[] SNIPPETS = {
+            "public static void ...",
+            "class Code { ...",
+            "Snippet #3",
+            "Snippet #4",
+            "Snippet #5",
+            "Snippet #6",
+            "Snippet #7",
+            "Snippet #8",
+            "Snippet #9",
+            "Snippet #10",
+            "Snippet #11",
+            "Snippet #12",
+            "Snippet #13",
+            "Snippet #14",
+
+            "Snippet #15",
+            "Snippet #16",
+            "Snippet #17",
+            "Snippet #18",
+            "Snippet #19",
+            "Snippet #20",
+            "Snippet #21",
+            "Snippet #22",
+        };
+
+        final Map<Integer, String> ids = new HashMap<>();
+        final Map<Integer, String> dates = new HashMap<>();
+        final Map<Integer, Integer> secs = new HashMap<>();
+        final Map<Integer, Integer> views = new HashMap<>();
+
+        boolean checkSecret = false;
+        long freezeTime = 0;
+        long awaitTime = 0;
+        long sleepDurationSec = 0;
+        long sleepLowerBound = 0;
+        long sleepUpperBound = 0;
+
+        static String th(int val) {
+            if (val == 1) {
+                return "" + val + "st";
+            } else if (val == 2) {
+                return "" + val + "nd";
+            } else if (val == 3) {
+                return "" + val + "rd";
+            } else {
+                return "" + val + "th";
+            }
+        }
+
+        static void checkStatusCode(HttpResponse resp, int status) {
+            if (resp.getStatusCode() != status) {
+                throw new WrongAnswer(
+                    resp.getRequest().getMethod() + " " +
+                        resp.getRequest().getLocalUri() +
+                        " should respond with status code " + status + ", " +
+                        "responded: " + resp.getStatusCode() + "\n\n" +
+                        "Response body:\n\n" + resp.getContent()
+                );
+            }
+        }
+
+        static void checkTitle(Document doc, String url, String title) {
+            if (!doc.title().equals(title)) {
+                throw new WrongAnswer("GET " + url +
+                    " should contain title \"" + title + "\"");
+            }
+        }
+
+        static Element getSingleTag(Element doc, String url, String tag) {
+            Elements elems = getElemsByTag(doc, url, tag, 1);
+            return elems.get(0);
+        }
+
+        static Elements getElemsByTag(Element doc, String url, String tag, int length) {
+            Elements elems = doc.getElementsByTag(tag);
+            if (elems.size() != length) {
+                throw new WrongAnswer("GET " + url +
+                    " should contain " + length + " <" + tag + "> " +
+                    "element"+ (length == 1 ? "" : "s") +", found: " + elems.size());
+            }
+            return elems;
+        }
+
+        static Element getById(Element doc, String url, String id, String tag) {
+            Element elem = doc.getElementById(id);
+
+            if (elem == null) {
+                throw new WrongAnswer("GET " + url +
+                    " should contain an element with id \"" + id + "\", no one found");
+            }
+
+            if (!elem.tagName().equals(tag)) {
+                throw new WrongAnswer("GET " + url +
+                    " should contain an element with id  \"" + id + "\" and tag \"" + tag + "\", " +
+                    "found another tag: \"" + elem.tagName() + "\"");
+            }
+
+            return elem;
+        }
+
+        static void checkMissingId(Element doc, String url, String id) {
+            Element elem = doc.getElementById(id);
+            if (elem != null) {
+                throw new WrongAnswer("GET " + url +
+                    " shouldn't contain an element with id \"" + id + "\", but one was found");
+            }
+        }
+
+        @DynamicTestingMethod
+        public DynamicTesting[] dt = new DynamicTesting[] {
+            // test 1
+            this::checkWebCodeNew,
+
+            // test 2
+            () -> postSnippet(0),
+            () -> checkApiCode(0),
+            () -> checkWebCode(0),
+            () -> checkApiLatest(0),
+            () -> checkWebLatest(0),
+
+            // test 7
+            () -> postSnippet(1),
+            () -> checkApiCode(0),
+            () -> checkWebCode(0),
+            () -> checkApiCode(1),
+            () -> checkWebCode(1),
+            () -> checkApiLatest(1, 0),
+            () -> checkWebLatest(1, 0),
+
+            // test 14
+            () -> postSnippet(2),
+            () -> postSnippet(3),
+            () -> postSnippet(4),
+            () -> postSnippet(5),
+            () -> postSnippet(6),
+            () -> postSnippet(7),
+            () -> postSnippet(8),
+            () -> postSnippet(9),
+            () -> postSnippet(10),
+            () -> postSnippet(11),
+            () -> postSnippet(12),
+            () -> postSnippet(13),
+
+            // test 26
+            () -> checkApiCode(0),
+            () -> checkWebCode(0),
+            () -> checkApiCode(1),
+            () -> checkWebCode(1),
+            () -> checkApiCode(2),
+            () -> checkWebCode(2),
+            () -> checkApiCode(3),
+            () -> checkWebCode(3),
+            () -> checkApiCode(4),
+            () -> checkWebCode(4),
+            () -> checkApiCode(5),
+            () -> checkWebCode(5),
+            () -> checkApiCode(6),
+            () -> checkWebCode(6),
+            () -> checkApiCode(7),
+            () -> checkWebCode(7),
+            () -> checkApiCode(8),
+            () -> checkWebCode(8),
+            () -> checkApiCode(9),
+            () -> checkWebCode(9),
+            () -> checkApiCode(10),
+            () -> checkWebCode(10),
+            () -> checkApiCode(11),
+            () -> checkWebCode(11),
+            () -> checkApiCode(12),
+            () -> checkWebCode(12),
+            () -> checkApiCode(13),
+            () -> checkWebCode(13),
+
+            // test 54
+            () -> checkApiLatest(13, 12, 11, 10, 9, 8, 7, 6, 5, 4),
+            () -> checkWebLatest(13, 12, 11, 10, 9, 8, 7, 6, 5, 4),
+
+            // test 56
+            this::reloadServer,
+
+            // test 57
+            () -> checkApiCode(0),
+            () -> checkWebCode(0),
+            () -> checkApiCode(1),
+            () -> checkWebCode(1),
+            () -> checkApiCode(2),
+            () -> checkWebCode(2),
+            () -> checkApiCode(3),
+            () -> checkWebCode(3),
+            () -> checkApiCode(4),
+            () -> checkWebCode(4),
+            () -> checkApiCode(5),
+            () -> checkWebCode(5),
+            () -> checkApiCode(6),
+            () -> checkWebCode(6),
+            () -> checkApiCode(7),
+            () -> checkWebCode(7),
+            () -> checkApiCode(8),
+            () -> checkWebCode(8),
+            () -> checkApiCode(9),
+            () -> checkWebCode(9),
+            () -> checkApiCode(10),
+            () -> checkWebCode(10),
+            () -> checkApiCode(11),
+            () -> checkWebCode(11),
+            () -> checkApiCode(12),
+            () -> checkWebCode(12),
+            () -> checkApiCode(13),
+            () -> checkWebCode(13),
+
+            // test 85
+            () -> checkApiLatest(13, 12, 11, 10, 9, 8, 7, 6, 5, 4),
+            () -> checkWebLatest(13, 12, 11, 10, 9, 8, 7, 6, 5, 4),
+
+            // test 87
+            () -> postSnippet(14),
+            () -> postSnippet(15, 100, 20),
+            () -> postSnippet(16),
+            () -> postSnippet(17, 0, 5),
+            () -> postSnippet(18),
+            () -> postSnippet(19, 3, 0),
+            () -> postSnippet(20),
+            () -> postSnippet(21, 30, 0),
+
+            // test 95
+            () -> checkApiCode(14),
+            () -> checkWebCode(14),
+            () -> checkApiCode(16),
+            () -> checkWebCode(16),
+            () -> checkApiCode(18),
+            () -> checkWebCode(18),
+            () -> checkApiCode(20),
+            () -> checkWebCode(20),
+
+            // test 103
+            () -> {
+                freezeTime = System.currentTimeMillis();
+                sleep(5000);
+                return reloadServer();
+            },
+
+            // test 104
+            () -> {
+                awaitTime = System.currentTimeMillis();
+                sleepDurationSec = (awaitTime - freezeTime) / 1000;
+                sleepLowerBound = sleepDurationSec;
+                sleepUpperBound = sleepLowerBound + 10;
+                checkSecret = true;
+                return CheckResult.correct();
+            },
+
+            // test 105
+            () -> checkApiCode(15),
+            () -> checkWebCode(15),
+            () -> checkApiCode(17),
+            () -> checkWebCode(17),
+            () -> checkApiCode404(19),
+            () -> checkWebCode404(19),
+            () -> checkApiCode(21),
+            () -> checkWebCode(21),
+
+            // test 113
+            () -> checkApiLatest(20, 18, 16, 14, 13, 12, 11, 10, 9, 8),
+            () -> checkWebLatest(20, 18, 16, 14, 13, 12, 11, 10, 9, 8),
+
+            // test 115
+            () -> checkApiCode(17),
+            () -> checkApiCode(17),
+            () -> checkWebCode(17),
+            () -> checkApiCode404(17),
+            () -> checkWebCode404(17),
+        };
+
+        private CheckResult checkApiCode(int id) {
+            String codeId = ids.get(id);
+            String snippet = SNIPPETS[id];
+            int time = secs.get(id);
+            int views = this.views.get(id);
+
+            HttpResponse resp = get(API_CODE + codeId).send();
+            checkStatusCode(resp, 200);
+
+            expect(resp.getContent()).asJson().check(
+                isObject()
+                    .value("code", snippet)
+                    .value("date", isString(s -> {
+                        if (dates.containsKey(id)) {
+                            return s.equals(dates.get(id));
+                        }
+                        dates.put(id, s);
+                        return true;
+                    }))
+                    .value("time", isInteger(i -> {
+                        if (!checkSecret || time == 0) {
+                            return i == 0;
+                        }
+                        int upperBound = (int) (time - sleepLowerBound);
+                        int lowerBound = (int) (time - sleepUpperBound);
+                        return i >= lowerBound && i <= upperBound;
+                    }))
+                    .value("views", isInteger(i -> {
+                        if (!checkSecret || views == 0) {
+                            return i == 0;
+                        }
+                        boolean result = i == views - 1;
+                        this.views.put(id, views - 1);
+                        return result;
+                    }))
+
+            );
+
+            return CheckResult.correct();
+        }
+
+        private CheckResult checkApiCode404(int id) {
+            HttpResponse resp = get(API_CODE + ids.get(id)).send();
+            checkStatusCode(resp, 404);
+            return CheckResult.correct();
+        }
+
+        private CheckResult checkWebCode(int id) {
+            String codeId = ids.get(id);
+            String apiSnippet = SNIPPETS[id];
+            String apiDate = dates.get(id);
+            int time = secs.get(id);
+            int views = this.views.get(id);
+
+            String req = WEB_CODE + codeId;
+            HttpResponse resp = get(req).send();
+            checkStatusCode(resp, 200);
+
+            String html = resp.getContent();
+            Document doc = Jsoup.parse(html);
+
+            checkTitle(doc, req, "Code");
+
+            Element pre = getById(doc, req, "code_snippet", "pre");
+            Element code = getSingleTag(pre, req, "code");
+
+            String webSnippetCode = code.text();
+            if (!webSnippetCode.trim().equals(apiSnippet.trim())) {
+                return CheckResult.wrong("Web code snippet " +
+                    "and api code snippet are different");
+            }
+
+            Element date = getById(doc, req, "load_date", "span");
+            String webSnippetDate = date.text();
+            if (!webSnippetDate.trim().equals(apiDate.trim())) {
+                return CheckResult.wrong("Web snippet date " +
+                    "and api snippet date are different");
+            }
+
+            if (time != 0) {
+                Element timeSpan = getById(doc, req, "time_restriction", "span");
+                String timeText = timeSpan.text();
+                int timeOnPage;
+                try {
+                    timeOnPage = expect(timeText).toContain(1).integers().get(0);
+                } catch (PresentationError ex) {
+                    return CheckResult.wrong(
+                        "GET " + req + " cannot find number of seconds inside \"time_restriction\" span element.\n" +
+                        "Full text:\n" + timeSpan
+                    );
+                }
+                int upperBound = (int) (time - sleepLowerBound);
+                int lowerBound = (int) (time - sleepUpperBound);
+
+                if (!(timeOnPage >= lowerBound && timeOnPage <= upperBound)) {
+                    return CheckResult.wrong("GET " + req + " should " +
+                        "contain time restriction between " + lowerBound
+                        + " and " + upperBound + ", found: " + timeOnPage + "\n" +
+                        "Full text:\n" + timeSpan);
+                }
+            } else {
+                checkMissingId(doc, req, "time_restriction");
+            }
+
+            if (views != 0) {
+                Element viewsSpan = getById(doc, req, "views_restriction", "span");
+                String viewsText = viewsSpan.text();
+                int viewsOnPage = expect(viewsText).toContain(1).integers().get(0);
+
+                if (viewsOnPage != views - 1) {
+                    return CheckResult.wrong("GET " + req + " should " +
+                        "contain views restriction equal to " + (views - 1)
+                        + ", found: " + viewsOnPage + "\n" +
+                        "Full text:\n" + viewsSpan);
+                }
+                this.views.put(id, views - 1);
+            } else {
+                checkMissingId(doc, req, "views_restriction");
+            }
+
+            return CheckResult.correct();
+        }
+
+        private CheckResult checkWebCode404(int id) {
+            HttpResponse resp = get(WEB_CODE + ids.get(id)).send();
+            checkStatusCode(resp, 404);
+            return CheckResult.correct();
+        }
+
+        private CheckResult checkWebCodeNew() {
+            HttpResponse resp = get(WEB_CODE_NEW).send();
+            checkStatusCode(resp, 200);
+
+            String html = resp.getContent();
+            Document doc = Jsoup.parse(html);
+
+            checkTitle(doc, WEB_CODE_NEW, "Create");
+
+            getById(doc, WEB_CODE_NEW, "code_snippet", "textarea");
+            getById(doc, WEB_CODE_NEW, "send_snippet", "button");
+
+            return CheckResult.correct();
+        }
+
+        private CheckResult postSnippet(int id) {
+            return postSnippet(id, 0, 0);
+        }
+
+        private CheckResult postSnippet(int id, int secs, int views) {
+            String snippet = SNIPPETS[id];
+            this.secs.put(id, secs);
+            this.views.put(id, views);
+
+            HttpResponse resp = post(API_CODE_NEW,
+                "{\"code\":\"" + snippet + "\", " +
+                    "\"time\": " + secs +", " +
+                    "\"views\": " + views + "}").send();
+            checkStatusCode(resp, 200);
+
+            expect(resp.getContent()).asJson().check(
+                isObject()
+                    .value("id", isString(i -> {
+                        if (i.length() != 36) {
+                            return false;
+                        }
+                        ids.put(id, "" + i);
+                        return true;
+                    }))
+            );
+
+            return CheckResult.correct();
+        }
+
+        private CheckResult checkApiLatest(int... ids) {
+            String req = API_LATEST;
+            HttpResponse resp = get(req).send();
+            checkStatusCode(resp, 200);
+
+            expect(resp.getContent()).asJson().check(
+                isArray(ids.length, isObject()
+                    .value("code", isString())
+                    .value("date", isString())
+                    .value("time", isInteger(i -> i == 0,
+                        "should be equal to 0 (latest snippets should not contain time restrictions)"))
+                    .value("views", isInteger(i -> i == 0,
+                        "should be equal to 0 (latest snippets should not contain time restrictions)"))
+                )
+            );
+
+            JsonArray elem = resp.getJson().getAsJsonArray();
+            for (int i = 0; i < ids.length; i++) {
+                JsonObject item = elem.get(i).getAsJsonObject();
+
+                String actualSnippet = SNIPPETS[ids[i]];
+                String actualDate = dates.get(ids[i]);
+
+                String givenSnippet = item.get("code").getAsString();
+                String givenDate = item.get("date").getAsString();
+
+                if (!actualSnippet.equals(givenSnippet)) {
+                    return CheckResult.wrong("GET " + req + " " + th(i + 1) +
+                        " snippet doesn't match actual snippet.\n" +
+                        "Expected:\n" + actualSnippet + "\n" +
+                        "Found:\n" + givenSnippet);
+                }
+
+                if (!actualDate.equals(givenDate)) {
+                    return CheckResult.wrong("GET " + req + " " + th(i + 1) +
+                        " snippet's date doesn't match actual snippet's date.\n" +
+                        "Expected:\n" + actualDate + "\n" +
+                        "Found:\n" + givenDate);
+                }
+            }
+
+            return CheckResult.correct();
+        }
+
+        private CheckResult checkWebLatest(int... ids) {
+            String req = WEB_LATEST;
+            HttpResponse resp = get(req).send();
+            checkStatusCode(resp, 200);
+
+            String html = resp.getContent();
+            Document doc = Jsoup.parse(html);
+
+            checkTitle(doc, req, "Latest");
+
+            Elements preList = getElemsByTag(doc, req, "pre", ids.length);
+            Elements spanList = getElemsByTag(doc, req, "span", ids.length);
+
+            for (int i = 0; i < ids.length; i++) {
+                String apiSnippet = SNIPPETS[ids[i]];
+                String apiDate = dates.get(ids[i]);
+                Element pre = preList.get(i);
+
+                String webSnippetCode = pre.text();
+                if (!webSnippetCode.trim().equals(apiSnippet.trim())) {
+                    return CheckResult.wrong("GET " + req + " " + th(i + 1)
+                        + " snippet doesn't match " + th(i + 1) + " snippet via api.\n" +
+                        "Expected:\n" + apiSnippet + "\n" +
+                        "Found:\n" + webSnippetCode);
+                }
+
+                Element date = spanList.get(i);
+                String webSnippetDate = date.text();
+                if (!webSnippetDate.trim().equals(apiDate.trim())) {
+                    return CheckResult.wrong("GET " + req + " " + th(i + 1)
+                        + " snippet's date doesn't match " + th(i + 1)
+                        + " snippet's date via api.\n" +
+                        "Expected:\n" + apiDate + "\n" +
+                        "Found:\n" + webSnippetDate);
+                }
+            }
+
+            return CheckResult.correct();
+        }
+
+        private CheckResult reloadServer() {
+            try {
+                reloadSpring();
+            } catch (Exception ex) {
+                throw new RuntimeException(ex.getMessage());
+            }
+            return CheckResult.correct();
+        }
+    }
+  learner_created: false
+- name: src/resources/templates/errorForNoRecordsYet.ftlh
+  visible: true
+  text: |-
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Latest</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Montserrat">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+        <style>
+            body, h1,h2,h3,h4,h5,h6 {font-family: "Montserrat", sans-serif}
+            .w3-row-padding img {margin-bottom: 12px}
+            /* Set the width of the sidebar to 120px */
+            .w3-sidebar {width: 120px;background: #222;}
+            /* Add a left margin to the "page content" that matches the width of the sidebar (120px) */
+            #main {margin-left: 120px}
+            /* Remove margins from "page content" on small screens */
+            @media only screen and (max-width: 600px) {#main {margin-left: 0}}
+        </style>
+    </head>
+    <body class="w3-black">
+
+    <!-- Icon Bar (Sidebar - hidden on small screens) -->
+    <nav class="w3-sidebar w3-bar-block w3-small w3-hide-small w3-center">
+        <!-- Avatar image in top left corner -->
+        <a href="/" class="w3-bar-item w3-button w3-padding-large w3-hover-black">
+            <i class="fa fa-home w3-xxlarge"></i>
+            <p>HOME</p>
+        </a>
+        <a href="/code/new" class="w3-bar-item w3-button w3-padding-large w3-hover-black">
+            <i class="fa fa-plus w3-xxlarge"></i>
+            <p>ADD</p>
+        </a>
+        <a href="/code" class="w3-bar-item w3-button w3-padding-large w3-hover-black">
+            <i class="fa fa-search w3-xxlarge"></i>
+            <p>SEARCH</p>
+        </a>
+        <a href="/code/latest" class="w3-bar-item w3-button w3-padding-large w3-hover-black">
+            <i class="fa fa-history w3-xxlarge"></i>
+            <p>LATEST</p>
+        </a>
+    </nav>
+
+    <!-- Navbar on small screens (Hidden on medium and large screens) -->
+    <div class="w3-top w3-hide-large w3-hide-medium" id="myNavbar">
+        <div class="w3-bar w3-black w3-opacity w3-hover-opacity-off w3-center w3-small">
+            <a href="#" class="w3-bar-item w3-button" style="width:25% !important">HOME</a>
+            <a href="#about" class="w3-bar-item w3-button" style="width:25% !important">ADD</a>
+            <a href="#photos" class="w3-bar-item w3-button" style="width:25% !important">SEARCH</a>
+            <a href="#contact" class="w3-bar-item w3-button" style="width:25% !important">LATEST</a>
+        </div>
+    </div>
+
+    <!-- Page Content -->
+    <div class="w3-padding-large" id="main">
+        <!-- Header/Home -->
+        <header class="w3-container w3-padding-32 w3-center w3-black" id="home">
+            <h1 class="w3-jumbo"><span class="w3-hide-small">Latest records</h1>
+        </header>
+
+        <h2>There are no records yet!</h2>
+
+        <!-- END PAGE CONTENT -->
+    </div>
+
+    </body>
+    </html>
+  learner_created: true
+- name: src/platform/presentation/CustomErrorController.java
+  visible: true
+  text: |
+    package platform.presentation;
+
+    import org.springframework.boot.web.servlet.error.ErrorController;
+    import org.springframework.stereotype.Controller;
+    import org.springframework.web.bind.annotation.GetMapping;
+
+    @Controller
+    public class CustomErrorController implements ErrorController {
+        @GetMapping("/error")
+        public String handleError() {
+            return "baseErrorPage";
+        }
+    }
+  learner_created: true
+- name: src/platform/presentation/RecordController.java
+  visible: true
+  text: |
+    package platform.presentation;
+
+    import com.fasterxml.jackson.core.JsonProcessingException;
+    import com.fasterxml.jackson.databind.JsonNode;
+    import com.fasterxml.jackson.databind.ObjectMapper;
+    import com.fasterxml.jackson.databind.node.ArrayNode;
+    import com.fasterxml.jackson.databind.node.ObjectNode;
+    import org.springframework.beans.factory.annotation.Autowired;
+    import org.springframework.http.HttpHeaders;
+    import org.springframework.http.ResponseEntity;
+    import org.springframework.stereotype.Controller;
+    import org.springframework.ui.Model;
+    import org.springframework.web.bind.annotation.*;
+    import platform.business.Record;
+    import platform.business.RecordService;
+
+    import java.time.LocalDateTime;
+    import java.time.format.DateTimeFormatter;
+    import java.time.temporal.ChronoUnit;
+    import java.util.ArrayList;
+    import java.util.Arrays;
+    import java.util.Comparator;
+    import java.util.stream.Collectors;
+    import java.util.stream.StreamSupport;
+
+    @Controller
+    public class RecordController {
+
+        private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+
+        @Autowired
+        RecordService recordService;
+
+        @GetMapping("/")
+        public String home(){
+            return "index";
+        }
+
+        @GetMapping("/code/new")
+        public String getFormForNewCodeSnippetCreation() {
+            return "uploadNew";
+        }
+
+        @PostMapping("/api/code/new")
+        public ResponseEntity<String> setNewPieceOfCode(@RequestBody JsonNode body) {
+            Record newRecord = new Record(body.get("code").asText(), LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES));
+            HttpHeaders headers = new HttpHeaders();
+            headers.add("Content-Type", "application/json");
+            ObjectMapper mapper = new ObjectMapper();
+            ObjectNode responseBodyObject = mapper.createObjectNode();
+            newRecord = recordService.save(newRecord);
+            responseBodyObject.put("id", Long.toString(newRecord.getId()));
+
+            try {
+                return ResponseEntity.ok().headers(headers).body(mapper.writerWithDefaultPrettyPrinter().writeValueAsString(responseBodyObject));
+            } catch (JsonProcessingException e) {
+                return ResponseEntity.internalServerError().body("Error occurred during json processing!");
+            }
+        }
+
+        @GetMapping("/code")
+        public String getWebPageForSearch() {
+            return "search";
+        }
+
+        @GetMapping("/code/{recordId}")
+        public String getWebPageWithPieceOfCode(@PathVariable(value="recordId") long recordId, Model model) {
+            if (recordService.existsById(recordId)) {
+                Record recordToReturn = recordService.findRecordById(recordId);
+                model.addAttribute("record", recordToReturn);
+                model.addAttribute("id", recordId);
+                return "specificPiece";
+            } else {
+                model.addAttribute("id", recordId);
+                return "errorForSpecificPiece";
+            }
+        }
+
+        @GetMapping("/api/code/{recordId}")
+        public ResponseEntity<String> getPieceOfCode(@PathVariable(value="recordId") long recordId) {
+            if (recordService.existsById(recordId)) {
+                HttpHeaders headers = new HttpHeaders();
+                headers.add("Content-Type", "application/json");
+                ObjectMapper mapper = new ObjectMapper();
+                ObjectNode responseBodyObject = mapper.createObjectNode();
+                Record recordToReturn = recordService.findRecordById(recordId);
+                responseBodyObject.put("code", recordToReturn.getCode());
+                responseBodyObject.put("date", recordToReturn.getDate().toString());
+
+                try {
+                    return ResponseEntity.ok().headers(headers).body(mapper.writerWithDefaultPrettyPrinter().writeValueAsString(responseBodyObject));
+                } catch (JsonProcessingException e) {
+                    return ResponseEntity.internalServerError().body("Error occurred during json processing!");
+                }
+            } else {
+                return ResponseEntity.badRequest().body("Record with requested id was not found");
+            }
+        }
+
+        @GetMapping("/code/latest")
+        public String getWebPageWithPieceOfCode(Model model) {
+            ArrayList<Record> listOfLatestRecords = (ArrayList<Record>) StreamSupport.stream(recordService.findAll().spliterator(), false)
+                    .sorted(Comparator.comparingLong(Record::getId).reversed())
+                    .limit(10)
+                    .collect(Collectors.toList());
+
+            if (listOfLatestRecords.isEmpty()) {
+                return "errorForNoRecordsYet";
+            } else {
+                model.addAttribute("latestRecords", listOfLatestRecords);
+                return "latestTen";
+            }
+        }
+
+        @GetMapping("/api/code/latest")
+        public ResponseEntity<String> getLatestPiecesOfCode() {
+            ArrayList<Record> listOfLatestRecords = (ArrayList<Record>) StreamSupport.stream(recordService.findAll().spliterator(), false)
+                    .sorted(Comparator.comparingLong(Record::getId).reversed())
+                    .limit(10)
+                    .collect(Collectors.toList());
+
+            if (listOfLatestRecords.isEmpty()) {
+                return ResponseEntity.ok().body("No records yet");
+            }
+
+            try {
+                HttpHeaders headers = new HttpHeaders();
+                headers.add("Content-Type", "application/json");
+                ObjectMapper mapper = new ObjectMapper();
+                ArrayNode root = mapper.createArrayNode();
+                for (Record record : listOfLatestRecords) {
+                    ObjectNode element = mapper.createObjectNode();
+                    element.put("code", record.getCode());
+                    element.put("date", record.getDate().format(FORMATTER).replace(' ', 'T'));
+                    root.add(element);
+                }
+                return ResponseEntity.ok().headers(headers).body(mapper.writerWithDefaultPrettyPrinter().writeValueAsString(root));
+            } catch (JsonProcessingException e) {
+                System.out.println(e.getMessage());
+                System.out.println(Arrays.toString(e.getStackTrace()));
+                return ResponseEntity.internalServerError().body("Error occurred during json processing!");
+            }
+        }
+    }
+  learner_created: true
+- name: src/resources/templates/specificPiece.ftlh
+  visible: true
+  text: |-
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Code</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Montserrat">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+        <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/highlightjs/cdn-release@10.2.1/build/styles/default.min.css">
+        <script src="//cdn.jsdelivr.net/gh/highlightjs/cdn-release@10.2.1/build/highlight.min.js"></script>
+        <script>hljs.initHighlightingOnLoad();</script>
+        <style>
+            body, h1,h2,h3,h4,h5,h6 {font-family: "Montserrat", sans-serif}
+            .w3-row-padding img {margin-bottom: 12px}
+            /* Set the width of the sidebar to 120px */
+            .w3-sidebar {width: 120px;background: #222;}
+            /* Add a left margin to the "page content" that matches the width of the sidebar (120px) */
+            #main {margin-left: 120px}
+            /* Remove margins from "page content" on small screens */
+            @media only screen and (max-width: 600px) {#main {margin-left: 0}}
+            .customButton {background-color: #fff;color: #000000;border-radius: 20px;border: 1px solid transparent;font-weight: bold;}
+        </style>
+    </head>
+    <body class="w3-black">
+
+    <!-- Icon Bar (Sidebar - hidden on small screens) -->
+    <nav class="w3-sidebar w3-bar-block w3-small w3-hide-small w3-center">
+        <!-- Avatar image in top left corner -->
+        <a href="/" class="w3-bar-item w3-button w3-padding-large w3-hover-black">
+            <i class="fa fa-home w3-xxlarge"></i>
+            <p>HOME</p>
+        </a>
+        <a href="/code/new" class="w3-bar-item w3-button w3-padding-large w3-hover-black">
+            <i class="fa fa-plus w3-xxlarge"></i>
+            <p>ADD</p>
+        </a>
+        <a href="/code" class="w3-bar-item w3-button w3-padding-large w3-black">
+            <i class="fa fa-search w3-xxlarge"></i>
+            <p>SEARCH</p>
+        </a>
+        <a href="/code/latest" class="w3-bar-item w3-button w3-padding-large w3-hover-black">
+            <i class="fa fa-history w3-xxlarge"></i>
+            <p>LATEST</p>
+        </a>
+    </nav>
+
+    <!-- Navbar on small screens (Hidden on medium and large screens) -->
+    <div class="w3-top w3-hide-large w3-hide-medium" id="myNavbar">
+        <div class="w3-bar w3-black w3-opacity w3-hover-opacity-off w3-center w3-small">
+            <a href="#" class="w3-bar-item w3-button" style="width:25% !important">HOME</a>
+            <a href="#about" class="w3-bar-item w3-button" style="width:25% !important">ADD</a>
+            <a href="#photos" class="w3-bar-item w3-button" style="width:25% !important">SEARCH</a>
+            <a href="#contact" class="w3-bar-item w3-button" style="width:25% !important">LATEST</a>
+        </div>
+    </div>
+
+    <!-- Page Content -->
+    <div class="w3-padding-large" id="main">
+        <!-- Header/Home -->
+        <header class="w3-container w3-padding-32 w3-center w3-black" id="home">
+            <h1 class="w3-jumbo"><span class="w3-hide-small">Here is your result!</h1>
+        </header>
+
+        <h2>Requested record with ${id} id:</h2>
+        <p>Date: <span id="load_date">${record.date}</span></p>
+        <br>
+        <p>Code:<br><pre id="code_snippet"><code>${record.code}</code></pre></p>
+
+        <!-- END PAGE CONTENT -->
+    </div>
+
+    </body>
+    </html>
+  learner_created: true
+- name: src/resources/templates/search.ftlh
+  visible: true
+  text: |-
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Search</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Montserrat">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+        <style>
+            body, h1,h2,h3,h4,h5,h6 {font-family: "Montserrat", sans-serif}
+            .w3-row-padding img {margin-bottom: 12px}
+            /* Set the width of the sidebar to 120px */
+            .w3-sidebar {width: 120px;background: #222;}
+            /* Add a left margin to the "page content" that matches the width of the sidebar (120px) */
+            #main {margin-left: 120px}
+            /* Remove margins from "page content" on small screens */
+            @media only screen and (max-width: 600px) {#main {margin-left: 0}}
+            .customButton {background-color: #fff;color: #000000;border-radius: 20px;border: 1px solid transparent;font-weight: bold;}
+        </style>
+    </head>
+    <body class="w3-black">
+
+    <!-- Icon Bar (Sidebar - hidden on small screens) -->
+    <nav class="w3-sidebar w3-bar-block w3-small w3-hide-small w3-center">
+        <!-- Avatar image in top left corner -->
+        <a href="/" class="w3-bar-item w3-button w3-padding-large w3-hover-black">
+            <i class="fa fa-home w3-xxlarge"></i>
+            <p>HOME</p>
+        </a>
+        <a href="/code/new" class="w3-bar-item w3-button w3-padding-large w3-hover-black">
+            <i class="fa fa-plus w3-xxlarge"></i>
+            <p>ADD</p>
+        </a>
+        <a href="/code" class="w3-bar-item w3-button w3-padding-large w3-black">
+            <i class="fa fa-search w3-xxlarge"></i>
+            <p>SEARCH</p>
+        </a>
+        <a href="/code/latest" class="w3-bar-item w3-button w3-padding-large w3-hover-black">
+            <i class="fa fa-history w3-xxlarge"></i>
+            <p>LATEST</p>
+        </a>
+    </nav>
+
+    <!-- Navbar on small screens (Hidden on medium and large screens) -->
+    <div class="w3-top w3-hide-large w3-hide-medium" id="myNavbar">
+        <div class="w3-bar w3-black w3-opacity w3-hover-opacity-off w3-center w3-small">
+            <a href="#" class="w3-bar-item w3-button" style="width:25% !important">HOME</a>
+            <a href="#about" class="w3-bar-item w3-button" style="width:25% !important">ADD</a>
+            <a href="#photos" class="w3-bar-item w3-button" style="width:25% !important">SEARCH</a>
+            <a href="#contact" class="w3-bar-item w3-button" style="width:25% !important">LATEST</a>
+        </div>
+    </div>
+
+    <!-- Page Content -->
+    <div class="w3-padding-large" id="main">
+        <!-- Header/Home -->
+        <header class="w3-container w3-padding-32 w3-center w3-black" id="home">
+            <h1 class="w3-jumbo">Search for a piece of code</h1>
+        </header>
+
+        <h2>Please, enter your code snippet id here</h2>
+        <textarea id="code_snippet_id"></textarea>
+        <br>
+        <button class="customButton" id='get_code_snippet' type='submit' onClick='tryToSearch()'>Submit</button>
+        <br>
+
+        <script type="text/javascript">
+            function tryToSearch() {
+
+                let code_snippet_id = document.getElementById('code_snippet_id').value;
+
+                if (code_snippet_id.length == 0){
+                    alert('Code snippet id is required\n');
+                    return false;
+                } else {
+                    window.location = "/code/" + code_snippet_id;
+                    return true;
+                }
+            }
+            </script>
+
+        <!-- END PAGE CONTENT -->
+    </div>
+
+    </body>
+    </html>
+  learner_created: true
+- name: src/platform/business/Record.java
+  visible: true
+  text: |
+    package platform.business;
+
+    import lombok.Data;
+    import lombok.NoArgsConstructor;
+
+    import javax.persistence.*;
+    import java.time.LocalDateTime;
+
+    @Entity
+    @Table(name = "records")
+    @Data
+    @NoArgsConstructor
+    public class Record {
+
+        @Id
+        @GeneratedValue(strategy = GenerationType.IDENTITY)
+        @Column(name = "record_id")
+        private long id;
+
+        @Column(name = "code")
+        private String code;
+
+        @Column(name = "date")
+        private LocalDateTime date;
+
+        public Record(String code, LocalDateTime date) {
+            this.code = code;
+            this.date = date;
+        }
+    }
+  learner_created: true
+- name: src/resources/templates/latestTen.ftlh
+  visible: true
+  text: |-
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Latest</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Montserrat">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+        <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/highlightjs/cdn-release@10.2.1/build/styles/default.min.css">
+        <script src="//cdn.jsdelivr.net/gh/highlightjs/cdn-release@10.2.1/build/highlight.min.js"></script>
+        <script>hljs.initHighlightingOnLoad();</script>
+        <style>
+            body, h1,h2,h3,h4,h5,h6 {font-family: "Montserrat", sans-serif}
+            .w3-row-padding img {margin-bottom: 12px}
+            /* Set the width of the sidebar to 120px */
+            .w3-sidebar {width: 120px;background: #222;}
+            /* Add a left margin to the "page content" that matches the width of the sidebar (120px) */
+            #main {margin-left: 120px}
+            /* Remove margins from "page content" on small screens */
+            @media only screen and (max-width: 600px) {#main {margin-left: 0}}
+            .customButton {background-color: #fff;color: #000000;border-radius: 20px;border: 1px solid transparent;font-weight: bold;}
+        </style>
+    </head>
+    <body class="w3-black">
+
+    <!-- Icon Bar (Sidebar - hidden on small screens) -->
+    <nav class="w3-sidebar w3-bar-block w3-small w3-hide-small w3-center">
+        <!-- Avatar image in top left corner -->
+        <a href="/" class="w3-bar-item w3-button w3-padding-large w3-hover-black">
+            <i class="fa fa-home w3-xxlarge"></i>
+            <p>HOME</p>
+        </a>
+        <a href="/code/new" class="w3-bar-item w3-button w3-padding-large w3-hover-black">
+            <i class="fa fa-plus w3-xxlarge"></i>
+            <p>ADD</p>
+        </a>
+        <a href="/code" class="w3-bar-item w3-button w3-padding-large w3-hover-black">
+            <i class="fa fa-search w3-xxlarge"></i>
+            <p>SEARCH</p>
+        </a>
+        <a href="/code/latest" class="w3-bar-item w3-button w3-padding-large w3-black">
+            <i class="fa fa-history w3-xxlarge"></i>
+            <p>LATEST</p>
+        </a>
+    </nav>
+
+    <!-- Navbar on small screens (Hidden on medium and large screens) -->
+    <div class="w3-top w3-hide-large w3-hide-medium" id="myNavbar">
+        <div class="w3-bar w3-black w3-opacity w3-hover-opacity-off w3-center w3-small">
+            <a href="#" class="w3-bar-item w3-button" style="width:25% !important">HOME</a>
+            <a href="#about" class="w3-bar-item w3-button" style="width:25% !important">ADD</a>
+            <a href="#photos" class="w3-bar-item w3-button" style="width:25% !important">SEARCH</a>
+            <a href="#contact" class="w3-bar-item w3-button" style="width:25% !important">LATEST</a>
+        </div>
+    </div>
+
+    <!-- Page Content -->
+    <div class="w3-padding-large" id="main">
+        <!-- Header/Home -->
+        <header class="w3-container w3-padding-32 w3-center w3-black" id="home">
+            <h1 class="w3-jumbo">Latest records</h1>
+        </header>
+
+        <h2>Here are our latest records:</h2>
+        <br>
+        <#list latestRecords as record>
+            <p>Date: <span id="load_date">${record.date}</span></p>
+            <br>
+            <p>Code:<br><pre id="code_snippet"><code>${record.code}</code></pre></p>
+            <br><br>
+        </#list>
+
+        <!-- END PAGE CONTENT -->
+    </div>
+
+    </body>
+    </html>
+  learner_created: true
+- name: src/resources/templates/baseErrorPage.ftlh
+  visible: true
+  text: |-
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Error</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Montserrat">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+        <style>
+            body, h1,h2,h3,h4,h5,h6 {font-family: "Montserrat", sans-serif}
+            .w3-row-padding img {margin-bottom: 12px}
+            /* Set the width of the sidebar to 120px */
+            .w3-sidebar {width: 120px;background: #222;}
+            /* Add a left margin to the "page content" that matches the width of the sidebar (120px) */
+            #main {margin-left: 120px}
+            /* Remove margins from "page content" on small screens */
+            @media only screen and (max-width: 600px) {#main {margin-left: 0}}
+        </style>
+    </head>
+    <body class="w3-black">
+
+    <!-- Icon Bar (Sidebar - hidden on small screens) -->
+    <nav class="w3-sidebar w3-bar-block w3-small w3-hide-small w3-center">
+        <!-- Avatar image in top left corner -->
+        <a href="/" class="w3-bar-item w3-button w3-padding-large w3-hover-black">
+            <i class="fa fa-home w3-xxlarge"></i>
+            <p>HOME</p>
+        </a>
+        <a href="/code/new" class="w3-bar-item w3-button w3-padding-large w3-hover-black">
+            <i class="fa fa-plus w3-xxlarge"></i>
+            <p>ADD</p>
+        </a>
+        <a href="/code" class="w3-bar-item w3-button w3-padding-large w3-hover-black">
+            <i class="fa fa-search w3-xxlarge"></i>
+            <p>SEARCH</p>
+        </a>
+        <a href="/code/latest" class="w3-bar-item w3-button w3-padding-large w3-hover-black">
+            <i class="fa fa-history w3-xxlarge"></i>
+            <p>LATEST</p>
+        </a>
+    </nav>
+
+    <!-- Navbar on small screens (Hidden on medium and large screens) -->
+    <div class="w3-top w3-hide-large w3-hide-medium" id="myNavbar">
+        <div class="w3-bar w3-black w3-opacity w3-hover-opacity-off w3-center w3-small">
+            <a href="#" class="w3-bar-item w3-button" style="width:25% !important">HOME</a>
+            <a href="#about" class="w3-bar-item w3-button" style="width:25% !important">ADD</a>
+            <a href="#photos" class="w3-bar-item w3-button" style="width:25% !important">SEARCH</a>
+            <a href="#contact" class="w3-bar-item w3-button" style="width:25% !important">LATEST</a>
+        </div>
+    </div>
+
+    <!-- Page Content -->
+    <div class="w3-padding-large" id="main">
+        <!-- Header/Home -->
+        <header class="w3-container w3-padding-32 w3-center w3-black" id="home">
+            <h1 class="w3-jumbo"><span class="w3-hide-small">Error!</h1>
+        </header>
+
+        <h2>Sorry, something went wrong!</h2>
+
+        <p>Please, try again later</p>
+
+        <!-- END PAGE CONTENT -->
+    </div>
+
+    </body>
+    </html>
+  learner_created: true
+- name: src/resources/templates/uploadNew.ftlh
+  visible: true
+  text: |-
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Create</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Montserrat">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+        <style>
+            body, h1,h2,h3,h4,h5,h6 {font-family: "Montserrat", sans-serif}
+            .w3-row-padding img {margin-bottom: 12px}
+            /* Set the width of the sidebar to 120px */
+            .w3-sidebar {width: 120px;background: #222;}
+            /* Add a left margin to the "page content" that matches the width of the sidebar (120px) */
+            #main {margin-left: 120px}
+            /* Remove margins from "page content" on small screens */
+            @media only screen and (max-width: 600px) {#main {margin-left: 0}}
+            .customButton {background-color: #fff;color: #000000;border-radius: 20px;border: 1px solid transparent;font-weight: bold;}
+        </style>
+    </head>
+    <body class="w3-black">
+
+    <!-- Icon Bar (Sidebar - hidden on small screens) -->
+    <nav class="w3-sidebar w3-bar-block w3-small w3-hide-small w3-center">
+        <!-- Avatar image in top left corner -->
+        <a href="/" class="w3-bar-item w3-button w3-padding-large w3-hover-black">
+            <i class="fa fa-home w3-xxlarge"></i>
+            <p>HOME</p>
+        </a>
+        <a href="/code/new" class="w3-bar-item w3-button w3-padding-large w3-black">
+            <i class="fa fa-plus w3-xxlarge"></i>
+            <p>ADD</p>
+        </a>
+        <a href="/code" class="w3-bar-item w3-button w3-padding-large w3-hover-black">
+            <i class="fa fa-search w3-xxlarge"></i>
+            <p>SEARCH</p>
+        </a>
+        <a href="/code/latest" class="w3-bar-item w3-button w3-padding-large w3-hover-black">
+            <i class="fa fa-history w3-xxlarge"></i>
+            <p>LATEST</p>
+        </a>
+    </nav>
+
+    <!-- Navbar on small screens (Hidden on medium and large screens) -->
+    <div class="w3-top w3-hide-large w3-hide-medium" id="myNavbar">
+        <div class="w3-bar w3-black w3-opacity w3-hover-opacity-off w3-center w3-small">
+            <a href="#" class="w3-bar-item w3-button" style="width:25% !important">HOME</a>
+            <a href="#about" class="w3-bar-item w3-button" style="width:25% !important">ADD</a>
+            <a href="#photos" class="w3-bar-item w3-button" style="width:25% !important">SEARCH</a>
+            <a href="#contact" class="w3-bar-item w3-button" style="width:25% !important">LATEST</a>
+        </div>
+    </div>
+
+    <!-- Page Content -->
+    <div class="w3-padding-large" id="main">
+        <!-- Header/Home -->
+        <header class="w3-container w3-padding-32 w3-center w3-black" id="home">
+            <h1 class="w3-jumbo">Add new piece of code</h1>
+        </header>
+
+        <h2>Please, post your code and press submit button</h2>
+        <textarea id="code_snippet">Enter your code snippet here</textarea>
+        <br>
+        <button class="customButton" id='send_snippet' type='submit' onClick='sendRequest()'>Submit</button>
+        <br>
+            <script type='text/javascript'>
+            function sendRequest() {
+                let object = { 'code': document.getElementById('code_snippet').value };
+                let json = JSON.stringify(object);
+                let xhr = new XMLHttpRequest();
+                xhr.open('POST', '/api/code/new', false)
+                xhr.setRequestHeader('Content-type', 'application/json; charset=utf-8');
+                xhr.send(json);
+                if (xhr.status == 200) {
+                    alert('Success!');
+                }
+            }
+        </script>
+
+        <!-- END PAGE CONTENT -->
+    </div>
+
+    </body>
+    </html>
+  learner_created: true
+- name: src/platform/persistence/RecordRepository.java
+  visible: true
+  text: |
+    package platform.persistence;
+
+    import org.springframework.data.repository.CrudRepository;
+    import org.springframework.stereotype.Repository;
+    import platform.business.Record;
+
+    @Repository
+    public interface RecordRepository extends CrudRepository<Record, Long> {
+        Record findRecordById(Long id);
+        boolean existsById(Long id);
+        Iterable<Record> findAll();
+    }
+  learner_created: true
+- name: src/platform/business/RecordService.java
+  visible: true
+  text: |
+    package platform.business;
+
+    import org.springframework.beans.factory.annotation.Autowired;
+    import org.springframework.stereotype.Service;
+    import platform.persistence.RecordRepository;
+
+    @Service
+    public class RecordService {
+
+        private final RecordRepository recordRepository;
+
+        @Autowired
+        public RecordService(RecordRepository recordRepository) {
+            this.recordRepository = recordRepository;
+        }
+
+        public Record findRecordById(Long id) {
+            return recordRepository.findRecordById(id);
+        }
+
+        public Record save(Record toSave) {
+            return recordRepository.save(toSave);
+        }
+
+        public boolean existsById(Long id) {
+            return recordRepository.existsById(id);
+        }
+
+        public Iterable<Record> findAll() {
+            return recordRepository.findAll();
+        }
+    }
+  learner_created: true
+- name: src/resources/templates/index.ftlh
+  visible: true
+  text: |
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Home</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Montserrat">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+        <style>
+            body, h1,h2,h3,h4,h5,h6 {font-family: "Montserrat", sans-serif}
+            .w3-row-padding img {margin-bottom: 12px}
+            /* Set the width of the sidebar to 120px */
+            .w3-sidebar {width: 120px;background: #222;}
+            /* Add a left margin to the "page content" that matches the width of the sidebar (120px) */
+            #main {margin-left: 120px}
+            /* Remove margins from "page content" on small screens */
+            @media only screen and (max-width: 600px) {#main {margin-left: 0}}
+            .customButton {background-color: #fff;color: #000000;border-radius: 20px;border: 1px solid transparent;font-weight: bold;}
+        </style>
+    </head>
+    <body class="w3-black">
+
+    <!-- Icon Bar (Sidebar - hidden on small screens) -->
+    <nav class="w3-sidebar w3-bar-block w3-small w3-hide-small w3-center">
+        <!-- Avatar image in top left corner -->
+        <a href="/" class="w3-bar-item w3-button w3-padding-large w3-black">
+            <i class="fa fa-home w3-xxlarge"></i>
+            <p>HOME</p>
+        </a>
+        <a href="/code/new" class="w3-bar-item w3-button w3-padding-large w3-hover-black">
+            <i class="fa fa-plus w3-xxlarge"></i>
+            <p>ADD</p>
+        </a>
+        <a href="/code" class="w3-bar-item w3-button w3-padding-large w3-hover-black">
+            <i class="fa fa-search w3-xxlarge"></i>
+            <p>SEARCH</p>
+        </a>
+        <a href="/code/latest" class="w3-bar-item w3-button w3-padding-large w3-hover-black">
+            <i class="fa fa-history w3-xxlarge"></i>
+            <p>LATEST</p>
+        </a>
+    </nav>
+
+    <!-- Navbar on small screens (Hidden on medium and large screens) -->
+    <div class="w3-top w3-hide-large w3-hide-medium" id="myNavbar">
+        <div class="w3-bar w3-black w3-opacity w3-hover-opacity-off w3-center w3-small">
+            <a href="#" class="w3-bar-item w3-button" style="width:25% !important">HOME</a>
+            <a href="#about" class="w3-bar-item w3-button" style="width:25% !important">ADD</a>
+            <a href="#photos" class="w3-bar-item w3-button" style="width:25% !important">SEARCH</a>
+            <a href="#contact" class="w3-bar-item w3-button" style="width:25% !important">LATEST</a>
+        </div>
+    </div>
+
+    <!-- Page Content -->
+    <div class="w3-padding-large" id="main">
+        <!-- Header/Home -->
+        <header class="w3-container w3-padding-32 w3-center w3-black" id="home">
+            <h1 class="w3-jumbo"><span class="w3-hide-small">Welcome to the</span> Code Sharing Platform</h1>
+        </header>
+
+        <h2>How to use our application:</h2>
+        <ul>
+            <li>To add a piece of code, go to <button class="customButton" onclick="location.href='/code/new'" type="button">Add a post</button> page using   <i class="fa fa-plus w3-large"></i>  navbar button</li>
+            <br>
+            <li>To get a piece of code by id, go to <button class="customButton" onclick="location.href='/code'" type="button">Find a post</button> page using    <i class="fa fa-search w3-large"></i>  navbar button</li>
+            <br>
+            <li>To get 10 latest posts, go to <button class="customButton" onclick="location.href='/code/latest'" type="button">Latest posts</button> page using    <i class="fa fa-history w3-large"></i>  navbar button</li>
+        </ul>
+
+        <!-- END PAGE CONTENT -->
+    </div>
+
+    </body>
+    </html>
+  learner_created: true
+- name: src/resources/templates/errorForSpecificPiece.ftlh
+  visible: true
+  text: |-
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Error</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Montserrat">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+        <style>
+            body, h1,h2,h3,h4,h5,h6 {font-family: "Montserrat", sans-serif}
+            .w3-row-padding img {margin-bottom: 12px}
+            /* Set the width of the sidebar to 120px */
+            .w3-sidebar {width: 120px;background: #222;}
+            /* Add a left margin to the "page content" that matches the width of the sidebar (120px) */
+            #main {margin-left: 120px}
+            /* Remove margins from "page content" on small screens */
+            @media only screen and (max-width: 600px) {#main {margin-left: 0}}
+        </style>
+    </head>
+    <body class="w3-black">
+
+    <!-- Icon Bar (Sidebar - hidden on small screens) -->
+    <nav class="w3-sidebar w3-bar-block w3-small w3-hide-small w3-center">
+        <!-- Avatar image in top left corner -->
+        <a href="/" class="w3-bar-item w3-button w3-padding-large w3-hover-black">
+            <i class="fa fa-home w3-xxlarge"></i>
+            <p>HOME</p>
+        </a>
+        <a href="/code/new" class="w3-bar-item w3-button w3-padding-large w3-hover-black">
+            <i class="fa fa-plus w3-xxlarge"></i>
+            <p>ADD</p>
+        </a>
+        <a href="/code" class="w3-bar-item w3-button w3-padding-large w3-hover-black">
+            <i class="fa fa-search w3-xxlarge"></i>
+            <p>SEARCH</p>
+        </a>
+        <a href="/code/latest" class="w3-bar-item w3-button w3-padding-large w3-hover-black">
+            <i class="fa fa-history w3-xxlarge"></i>
+            <p>LATEST</p>
+        </a>
+    </nav>
+
+    <!-- Navbar on small screens (Hidden on medium and large screens) -->
+    <div class="w3-top w3-hide-large w3-hide-medium" id="myNavbar">
+        <div class="w3-bar w3-black w3-opacity w3-hover-opacity-off w3-center w3-small">
+            <a href="#" class="w3-bar-item w3-button" style="width:25% !important">HOME</a>
+            <a href="#about" class="w3-bar-item w3-button" style="width:25% !important">ADD</a>
+            <a href="#photos" class="w3-bar-item w3-button" style="width:25% !important">SEARCH</a>
+            <a href="#contact" class="w3-bar-item w3-button" style="width:25% !important">LATEST</a>
+        </div>
+    </div>
+
+    <!-- Page Content -->
+    <div class="w3-padding-large" id="main">
+        <!-- Header/Home -->
+        <header class="w3-container w3-padding-32 w3-center w3-black" id="home">
+            <h1 class="w3-jumbo"><span class="w3-hide-small">Error!</h1>
+        </header>
+
+        <h2>Sorry, record with id = ${id} was not found!</h2>
+
+        <!-- END PAGE CONTENT -->
+    </div>
+
+    </body>
+    </html>
+  learner_created: true
+feedback_link: https://hyperskill.org/learn/step/11031#comment
+status: Solved
+feedback:
+  message: Well done! You've finished the project. Select a new project on <a href="https://hyperskill.org/projects">JetBrains
+    Academy</a> to continue learning.
+  time: Fri, 30 Sep 2022 13:56:54 UTC
+record: -1

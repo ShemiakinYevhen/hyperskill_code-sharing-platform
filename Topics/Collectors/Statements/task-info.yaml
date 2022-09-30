@@ -1,0 +1,25 @@
+type: choice
+is_multiple_choice: true
+options:
+- text: The collect is a terminal operation.
+- text: 'It''s possible to collect elements of a stream to a list or a set using standard
+    collectors. '
+- text: 'It''s impossible to collect elements of a stream to a map using standard
+    collectors. '
+- text: There is no standard collectors for producing single values (not collections)
+files:
+- name: src/Task.java
+  visible: true
+  text: |
+    // You can experiment here, it won’t be checked
+
+    public class Task {
+      public static void main(String[] args) {
+        // put your code here
+      }
+    }
+  learner_created: false
+feedback_link: https://hyperskill.org/learn/step/2450#comment
+status: Solved
+record: -1
+local_check: false

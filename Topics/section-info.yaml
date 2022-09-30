@@ -1,0 +1,12 @@
+content:
+- BigDecimal
+- Instant
+- Strategy
+- Anonymous classes
+- Lambda expressions
+- Declaring a method
+- Comparator
+- Functional data processing with streams
+- Arrays as parameters
+- Collectors
+- Processing strings
